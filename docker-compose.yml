@@ -1,42 +1,44 @@
 version: '3.8'
 
 services:
-  # --- SERVICE BDD ---
+  # --- SERVICE BASE DE DONNÉES ---
   postgres:
     image: postgres:15-alpine
-    container_name: mon_projet_db
+    container_name: aegis_postgres
+    # Ici, on mappe tes variables .env vers les variables officielles de l'image Postgres
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: mabase
+      POSTGRES_USER: ${DATABASE_USER}      # Lit la variable du fichier .env
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
     ports:
-      - "5432:5432" # Permet d'accéder à la BDD depuis le PC
+      - "${DATABASE_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Pour ne pas perdre les données quand on éteint
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aegis_network
 
   # --- SERVICE BACKEND (NestJS) ---
   backend:
-    container_name: mon_projet_back
+    container_name: aegis_backend
     build:
       context: ../backend
       dockerfile: Dockerfile
     volumes:
-      - ../backend:/app # <--- MIRROIR : Ton code local remplace celui du conteneur
-      - /app/node_modules # <--- PROTECTION : On garde les modules du conteneur, pas ceux de ton PC
+      - ../backend:/app
+      - /app/node_modules
+    # La magie est ici : on injecte tout le fichier .env directement dans le Node.js
+    env_file:
+      - .env  
     ports:
-      - "3001:3000" # Port PC : Port Conteneur (NestJS tourne sur 3000, on l'expose sur 3001 par ex)
-    environment:
-      - DATABASE_HOST=postgres # Nom du service ci-dessus
-      - DATABASE_USER=admin
-      - DATABASE_PASSWORD=password123
-      - DATABASE_NAME=mabase
-      - DATABASE_PORT=5432
+      - "${PORT}:3000"
     depends_on:
       - postgres
+    networks:
+      - aegis_network
 
   # --- SERVICE FRONTEND (React) ---
   frontend:
-    container_name: mon_projet_front
+    container_name: aegis_frontend
     build:
       context: ../frontend
       dockerfile: Dockerfile
@@ -44,12 +46,15 @@ services:
       - ../frontend:/app
       - /app/node_modules
     ports:
-      - "5173:5173" # Si Vite. Si Create-React-App mets "3000:3000"
+      - "5173:5173"
+    # Le front a parfois besoin de connaitre l'URL de l'API
     environment:
-      - VITE_API_URL=http://localhost:3001 # L'URL pour taper le back
-    stdin_open: true # Important pour React en mode Docker
-    tty: true
+      - VITE_API_URL=http://localhost:${PORT} 
+    networks:
+      - aegis_network
 
-# Définition du volume de stockage pour la BDD
 volumes:
   postgres_data:
+
+networks:
+  aegis_network:
