@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # --- SERVICE BDD ---
+  postgres:
+    image: postgres:15-alpine
+    container_name: mon_projet_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: mabase
+    ports:
+      - "5432:5432" # Permet d'accéder à la BDD depuis le PC
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Pour ne pas perdre les données quand on éteint
+
+  # --- SERVICE BACKEND (NestJS) ---
+  backend:
+    container_name: mon_projet_back
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    volumes:
+      - ../backend:/app # <--- MIRROIR : Ton code local remplace celui du conteneur
+      - /app/node_modules # <--- PROTECTION : On garde les modules du conteneur, pas ceux de ton PC
+    ports:
+      - "3001:3000" # Port PC : Port Conteneur (NestJS tourne sur 3000, on l'expose sur 3001 par ex)
+    environment:
+      - DATABASE_HOST=postgres # Nom du service ci-dessus
+      - DATABASE_USER=admin
+      - DATABASE_PASSWORD=password123
+      - DATABASE_NAME=mabase
+      - DATABASE_PORT=5432
+    depends_on:
+      - postgres
+
+  # --- SERVICE FRONTEND (React) ---
+  frontend:
+    container_name: mon_projet_front
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173" # Si Vite. Si Create-React-App mets "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:3001 # L'URL pour taper le back
+    stdin_open: true # Important pour React en mode Docker
+    tty: true
+
+# Définition du volume de stockage pour la BDD
+volumes:
+  postgres_data:
